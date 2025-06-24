@@ -1,0 +1,14 @@
+torch
+torchvision
+torchaudio
+opencv-python
+mediapipe
+numpy
+scikit-learn
+tqdm
+wandb
+yt-dlp
+ffmpeg-python
+moviepy
+optuna
+flask
