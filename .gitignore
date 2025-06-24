@@ -1,0 +1,72 @@
+# Ambientes virtuais
+venv/
+.env/
+.venv/
+env/
+ENV/
+
+# Cache do Python
+__pycache__/
+*.py[cod]
+*.so
+*.pyd
+*.pyc
+
+# Arquivos de logs e execução
+*.log
+*.out
+*.err
+
+# Dados e pesos
+*.pth
+*.pt
+*.ckpt
+checkpoints/
+runs/
+wandb/
+lightning_logs/
+*.onnx
+
+# Datasets locais
+data/processed/
+data/raw_videos/
+datasets/
+*.zip
+*.tar.gz
+*.mp4
+*.avi
+*.jpg
+*.png
+*.npy
+*.npz
+
+# Arquivos temporários
+*.tmp
+*.bak
+*.swp
+.DS_Store
+Thumbs.db
+
+# Configuração de IDEs
+.vscode/
+.idea/
+*.code-workspace
+
+# Arquivos de testes e debug
+debug/
+test_output/
+
+# Arquivos de exportação
+exports/
+models/
+outputs/
+inference_results/
+
+# Arquivos do sistema operacional
+desktop.ini
+
+# Jupyter Notebooks checkpoints (se usar futuramente)
+.ipynb_checkpoints/
+
+# Arquivos de upload local temporários
+uploads/
