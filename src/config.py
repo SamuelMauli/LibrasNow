@@ -5,7 +5,7 @@ import torch
 # --- Project Paths ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(BASE_DIR, "..", "data")
-RAW_VIDEO_DIR = os.path.join(DATA_DIR, "raw_videos")
+RAW_DATA_DIR = os.path.join(DATA_DIR, "raw_data")
 PROCESSED_DATA_DIR = os.path.join(DATA_DIR, "processed")
 PROCESSED_DATA_FILE = os.path.join(PROCESSED_DATA_DIR, "sequences_and_labels.pkl")
 MODEL_SAVE_DIR = os.path.join(BASE_DIR, "..", "models")
@@ -13,6 +13,7 @@ MODEL_SAVE_DIR = os.path.join(BASE_DIR, "..", "models")
 # --- Data Processing ---
 SEQUENCE_LENGTH = 30
 VIDEO_FILE_EXTENSIONS = (".mp4", ".avi", ".mov", ".mkv")
+IMAGE_FILE_EXTENSIONS = (".jpg", ".jpeg", ".png")
 
 # --- Model Architecture ---
 INPUT_SIZE = 21 * 3
@@ -31,6 +32,9 @@ EARLY_STOPPING_PATIENCE = 10
 
 # --- Compression ---
 PRUNING_AMOUNT = 0.4
+
+# --- Inference ---
+INFERENCE_CONFIDENCE_THRESHOLD = 0.85
 
 # --- WandB Logging ---
 WANDB_PROJECT = "QPruner-Libras"
