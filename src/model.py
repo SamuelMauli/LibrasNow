@@ -52,3 +52,34 @@ class SignLanguageTransformer(nn.Module):
         output = output.mean(dim=1)
         output = self.classifier(output)
         return output
+
+
+# --- NOVA CLASSE PARA QUANTIZAÇÃO SEGURA ---
+class QuantizedSignLanguageTransformer(nn.Module):
+    def __init__(self, float_model: SignLanguageTransformer):
+        super(QuantizedSignLanguageTransformer, self).__init__()
+        # Garante que o modelo a ser quantizado está em modo de avaliação e na CPU
+        float_model.eval()
+        float_model.to("cpu")
+
+        # Quantiza as camadas que são seguras (Linear)
+        self.input_projection = torch.quantization.quantize_dynamic(
+            float_model.input_projection, {nn.Linear}, dtype=torch.qint8
+        )
+        self.classifier = torch.quantization.quantize_dynamic(
+            float_model.classifier, {nn.Linear}, dtype=torch.qint8
+        )
+
+        # Mantém as camadas complexas como estavam (em float)
+        self.pos_encoder = float_model.pos_encoder
+        self.transformer_encoder = float_model.transformer_encoder
+        self.d_model = float_model.d_model
+
+    def forward(self, src):
+        # O forward pass agora usa os módulos corretos (quantizados e float)
+        src = self.input_projection(src) * math.sqrt(self.d_model)
+        src = self.pos_encoder(src)
+        output = self.transformer_encoder(src)
+        output = output.mean(dim=1)
+        output = self.classifier(output)
+        return output
