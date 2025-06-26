@@ -10,10 +10,11 @@ PROCESSED_DATA_DIR = os.path.join(DATA_DIR, "processed")
 PROCESSED_DATA_FILE = os.path.join(PROCESSED_DATA_DIR, "sequences_and_labels.pkl")
 MODEL_SAVE_DIR = os.path.join(BASE_DIR, "..", "models")
 
-# --- Data Processing ---
+# --- Data Processing & Augmentation ---
 SEQUENCE_LENGTH = 30
 VIDEO_FILE_EXTENSIONS = (".mp4", ".avi", ".mov", ".mkv")
 IMAGE_FILE_EXTENSIONS = (".jpg", ".jpeg", ".png")
+AUGMENTATION_PROB = 0.5  # Probabilidade de aplicar aumento de dados em um frame
 
 # --- Model Architecture ---
 INPUT_SIZE = 21 * 3
@@ -31,10 +32,12 @@ SAM_RHO = 0.05
 EARLY_STOPPING_PATIENCE = 10
 
 # --- Compression ---
-PRUNING_AMOUNT = 0.4
+PRUNING_AMOUNT = 0.4  # Poda de 40% dos pesos menos salientes
+FINETUNE_EPOCHS = 10  # Mais épocas de fine-tuning para recuperação
+FINETUNE_LR = 1e-5  # Taxa de aprendizado mais baixa para ajuste fino
 
 # --- Inference ---
 INFERENCE_CONFIDENCE_THRESHOLD = 0.85
 
 # --- WandB Logging ---
-WANDB_PROJECT = "QPruner-Libras"
+WANDB_PROJECT = "QPruner-Libras-Advanced"

@@ -1,15 +1,19 @@
 import os
+import sys
 
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import wandb
 
-from config import *
+import wandb
 from dataset import get_data_loaders
 from engine import train_step, validation_step
 from model import SignLanguageTransformer
 from optimizer import SAM
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), ".")))
+
+from config import *
 
 
 class EarlyStopper:

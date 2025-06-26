@@ -2,28 +2,23 @@ import copy
 import os
 import pickle
 import platform
+import sys
 
 import torch
 import torch.nn as nn
-import torch.nn.utils.prune as prune
 import torch.optim as optim
 from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 
+from model import QuantizedSignLanguageTransformer, SignLanguageTransformer
+from pruning_utils import saliency_based_pruning
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), ".")))
+
 from config import *
 
-# A importação agora traz as duas classes de modelo
-from model import QuantizedSignLanguageTransformer, SignLanguageTransformer
 
-# (O conteúdo das classes SignLanguageDataset, get_data_loaders, validation_step,
-# measure_model_size, apply_structured_pruning, fine_tune_pruned_model e evaluate_model
-# pode continuar o mesmo da versão anterior, pois estavam corretos.)
-
-
-# --- Colar aqui as definições das funções auxiliares da versão anterior ---
-# SignLanguageDataset, get_data_loaders, validation_step, measure_model_size, etc.
-# ... (para manter o script auto-contido, copie e cole as funções daqui) ...
 class SignLanguageDataset(Dataset):
     def __init__(self, sequences, labels):
         self.sequences = torch.tensor(sequences, dtype=torch.float32)
@@ -45,6 +40,7 @@ def get_data_loaders(batch_size_override=None, force_cpu=False):
             f"Erro: Arquivo de dados processados não encontrado em {PROCESSED_DATA_FILE}"
         )
         return None, None, None, 0
+
     X, y, actions, num_classes = (
         data["sequences"],
         data["labels"],
@@ -54,26 +50,28 @@ def get_data_loaders(batch_size_override=None, force_cpu=False):
     X_train, X_val, y_train, y_val = train_test_split(
         X, y, test_size=0.2, random_state=42, stratify=y
     )
-    train_dataset, val_dataset = SignLanguageDataset(
-        X_train, y_train
-    ), SignLanguageDataset(X_val, y_val)
+
+    train_dataset = SignLanguageDataset(X_train, y_train)
+    val_dataset = SignLanguageDataset(X_val, y_val)
+
     num_workers = 0 if platform.system() == "Windows" or force_cpu else 4
-    current_batch_size = batch_size_override if batch_size_override else BATCH_SIZE
+    batch_size = batch_size_override if batch_size_override else BATCH_SIZE
+
     train_loader = DataLoader(
         train_dataset,
-        batch_size=current_batch_size,
+        batch_size=batch_size,
         shuffle=True,
         num_workers=num_workers,
         pin_memory=not force_cpu,
     )
     val_loader = DataLoader(
         val_dataset,
-        batch_size=current_batch_size,
+        batch_size=batch_size,
         shuffle=False,
         num_workers=num_workers,
         pin_memory=not force_cpu,
-        drop_last=True,
     )
+
     return train_loader, val_loader, actions, num_classes
 
 
@@ -87,11 +85,9 @@ def validation_step(model, data_loader, criterion, device):
             loss = criterion(outputs, labels)
             total_loss += loss.item() * sequences.size(0)
             _, predicted = torch.max(outputs.data, 1)
-            total_samples += labels.size(0)
             total_correct += (predicted == labels).sum().item()
-    avg_loss = total_loss / total_samples if total_samples > 0 else 0
-    accuracy = total_correct / total_samples if total_samples > 0 else 0
-    return avg_loss, accuracy
+            total_samples += labels.size(0)
+    return total_loss / total_samples, total_correct / total_samples
 
 
 def measure_model_size(model, filepath="temp.pth"):
@@ -101,26 +97,15 @@ def measure_model_size(model, filepath="temp.pth"):
     return size
 
 
-def apply_structured_pruning(model, amount=PRUNING_AMOUNT):
-    for name, module in model.named_modules():
-        if isinstance(module, torch.nn.Linear):
-            try:
-                prune.ln_structured(module, name="weight", amount=amount, n=2, dim=0)
-                prune.remove(module, "weight")
-            except Exception as e:
-                print(f"Could not prune module {name}: {e}")
-    return model
-
-
-def fine_tune_pruned_model(model, train_loader, val_loader, device, epochs=5):
-    print("\n--- Starting Fine-Tuning after Pruning ---")
+def fine_tune_model(model, train_loader, val_loader, device, title, epochs=5, lr=1e-5):
+    print(f"\n--- Starting {title} ---")
     model.to(device)
-    optimizer = optim.AdamW(model.parameters(), lr=1e-5)
+    optimizer = optim.AdamW(model.parameters(), lr=lr)
     criterion = nn.CrossEntropyLoss()
     for epoch in range(epochs):
         model.train()
         for sequences, labels in tqdm(
-            train_loader, desc=f"Fine-Tuning Epoch {epoch+1}/{epochs}"
+            train_loader, desc=f"{title} Epoch {epoch+1}/{epochs}"
         ):
             sequences, labels = sequences.to(device), labels.to(device)
             optimizer.zero_grad()
@@ -128,7 +113,9 @@ def fine_tune_pruned_model(model, train_loader, val_loader, device, epochs=5):
             loss = criterion(outputs, labels)
             loss.backward()
             optimizer.step()
-        evaluate_model(model, val_loader, device, title="Fine-Tune Validation")
+        evaluate_model(
+            model, val_loader, device, title=f"Validation after {title} Epoch {epoch+1}"
+        )
     return model
 
 
@@ -140,18 +127,15 @@ def evaluate_model(model, val_loader, device, title="Model Evaluation"):
     return val_acc
 
 
-# --- Fim das funções auxiliares ---
-
-
-if __name__ == "__main__":
+def main():
     train_loader, val_loader, _, num_classes = get_data_loaders(batch_size_override=32)
     if val_loader is None:
-        exit()
+        return
 
     baseline_model_path = os.path.join(MODEL_SAVE_DIR, "baseline.pth")
     if not os.path.exists(baseline_model_path):
         print("Baseline model not found. Please train the model first.")
-        exit()
+        return
 
     model = SignLanguageTransformer(
         input_size=INPUT_SIZE,
@@ -168,8 +152,13 @@ if __name__ == "__main__":
     size_original = measure_model_size(model)
     print(f"Original model size: {size_original:.2f} MB")
 
-    pruned_model = copy.deepcopy(model)
-    pruned_model = apply_structured_pruning(pruned_model)
+    pruned_model = saliency_based_pruning(
+        copy.deepcopy(model),
+        PRUNING_AMOUNT,
+        train_loader,
+        nn.CrossEntropyLoss(),
+        DEVICE,
+    )
     evaluate_model(
         pruned_model,
         val_loader,
@@ -177,22 +166,22 @@ if __name__ == "__main__":
         title="Evaluating Pruned Model (Before Fine-Tuning)",
     )
 
-    finetuned_pruned_model = fine_tune_pruned_model(
-        pruned_model, train_loader, val_loader, DEVICE, epochs=5
+    finetuned_model = fine_tune_model(
+        pruned_model,
+        train_loader,
+        val_loader,
+        DEVICE,
+        "Fine-Tuning after Pruning",
+        epochs=FINETUNE_EPOCHS,
+        lr=FINETUNE_LR,
     )
-    size_pruned = measure_model_size(finetuned_pruned_model)
+    size_pruned = measure_model_size(finetuned_model)
     print(f"Pruned and Fine-Tuned model size: {size_pruned:.2f} MB")
 
-    # --- ETAPA DE QUANTIZAÇÃO CORRIGIDA ---
     print("\n--- Creating Final Quantized Model ---")
-    # 1. Garante que o modelo está na CPU e em modo de avaliação
-    finetuned_pruned_model.to("cpu")
-    finetuned_pruned_model.eval()
-
-    # 2. Instancia a nova classe que aplica a quantização de forma segura
-    quantized_model = QuantizedSignLanguageTransformer(finetuned_pruned_model)
+    finetuned_model.to("cpu").eval()
+    quantized_model = QuantizedSignLanguageTransformer(finetuned_model)
     quantized_model.eval()
-    # --- FIM DA CORREÇÃO ---
 
     size_quantized = measure_model_size(quantized_model, "temp_quant.pth")
     print(f"Pruned, Fine-Tuned, and Quantized model size: {size_quantized:.2f} MB")
@@ -210,3 +199,7 @@ if __name__ == "__main__":
     )
     torch.save(quantized_model.state_dict(), compressed_model_path)
     print(f"\nFinal compressed model saved to {compressed_model_path}")
+
+
+if __name__ == "__main__":
+    main()
