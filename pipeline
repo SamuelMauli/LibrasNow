@@ -1,0 +1,17 @@
+Processar os dados:
+python pipeline.py process-data
+
+
+Treinar o modelo base:
+python pipeline.py train-baseline
+
+Executar todos os experimentos de pruning (o coração do seu TCC):
+python pipeline.py run-experiments
+
+
+Iniciar a aplicação de inferência em tempo real:
+python pipeline.py inference
+
+
+Visualizar o dashboard com os resultados:
+python pipeline.py dashboard

@@ -13,3 +13,5 @@ moviepy
 optuna
 flask
 albumentations
+streamlit
+pandas
