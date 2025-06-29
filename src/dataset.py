@@ -1,3 +1,4 @@
+import collections
 import pickle
 from typing import Any, Dict, List, Tuple
 
@@ -35,10 +36,10 @@ class DataManager:
 
     def __init__(self, data_path: str = PROCESSED_DATA_FILE):
         self.data_path = data_path
-        self._load_data()
+        self._load_and_diagnose_data()
 
-    def _load_data(self):
-        """Carrega o arquivo .pkl com os dados processados."""
+    def _load_and_diagnose_data(self):
+        """Carrega e diagnostica o arquivo .pkl com os dados processados."""
         try:
             with open(self.data_path, "rb") as f:
                 data = pickle.load(f)
@@ -49,6 +50,33 @@ class DataManager:
             print(
                 f"Dados carregados com sucesso. Encontradas {len(self.sequences)} sequências."
             )
+
+            # --- Bloco de Diagnóstico ---
+            print("\n--- DIAGNÓSTICO DA DISTRIBUIÇÃO DE CLASSES ---")
+            counts = collections.Counter(self.labels)
+            is_valid = True
+            for label_idx, count in sorted(counts.items()):
+                action_name = self.actions[label_idx]
+                if count < 2:
+                    print(
+                        f"!!! PROBLEMA: A classe '{action_name}' (label {label_idx}) tem apenas {count} amostra(s)."
+                    )
+                    is_valid = False
+                else:
+                    print(
+                        f"    OK: Classe '{action_name}' (label {label_idx}) tem {count} amostras."
+                    )
+
+            if not is_valid:
+                print("\nERRO DE DADOS: Pelo menos uma classe tem menos de 2 amostras.")
+                print(
+                    "Para corrigir, adicione mais dados às pastas problemáticas em 'data/raw_data/' ou remova-as."
+                )
+                raise ValueError(
+                    "Dataset inválido para divisão estratificada. Verifique o diagnóstico acima."
+                )
+            print("--- Diagnóstico Concluído: O dataset é válido para divisão. ---\n")
+
         except FileNotFoundError:
             print(
                 f"ERRO: Arquivo de dados processados não encontrado em '{self.data_path}'."
@@ -57,16 +85,6 @@ class DataManager:
             raise
 
     def get_data_loaders(self) -> Tuple[DataLoader, DataLoader]:
-        """
-        Cria e retorna os DataLoaders de treino e validação.
-
-        # Fundamento Acadêmico: Divisão Estratificada (Stratified Split)
-        # O que faz: Ao dividir os dados, a opção `stratify=y` garante que a
-        # proporção de cada classe (cada sinal de Libras) seja a mesma tanto no
-        # conjunto de treino quanto no de validação. Isso é crucial para evitar
-        # viés na avaliação do modelo, especialmente se o dataset for desbalanceado,
-        # e assegura que a métrica de acurácia de validação seja confiável.
-        """
         X_train, X_val, y_train, y_val = train_test_split(
             self.sequences,
             self.labels,
@@ -78,8 +96,6 @@ class DataManager:
         train_dataset = SignLanguageDataset(X_train, y_train)
         val_dataset = SignLanguageDataset(X_val, y_val)
 
-        # Otimização: num_workers e pin_memory aceleram o carregamento dos dados
-        # para a GPU, mantendo-a ocupada e otimizando o tempo de treinamento.
         train_loader = DataLoader(
             train_dataset,
             batch_size=BATCH_SIZE,

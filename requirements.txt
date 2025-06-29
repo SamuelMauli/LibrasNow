@@ -15,3 +15,4 @@ flask
 albumentations
 streamlit
 pandas
+pytest
